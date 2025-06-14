@@ -1,0 +1,10 @@
+#!/bin/bash
+
+commit_msg=$(cat "$1")
+pattern="^(feat|fix|chore|docs|refactor|test|style)(\([^)]+\))?: .+"
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+  echo "❌ Commit message must comply with Conventional Commits!"
+  echo "   Example: feat(auth): added JWT login"
+  exit 1
+fi
