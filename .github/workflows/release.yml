@@ -1,0 +1,77 @@
+name: Release & Docker Publish
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Semantic Release
+        id: semrel
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from last tag
+        if: steps.semrel.outputs.new-release-published == 'true'
+        id: extract_version
+        run: |
+          TAG=$(git describe --tags --abbrev=0)
+          VERSION=${TAG#v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION"
+
+      - name: Build Angular App
+        if: steps.semrel.outputs.new-release-published == 'true'
+        run: npm run build -- --configuration production
+
+      - name: Log in to Docker Hub
+        if: steps.semrel.outputs.new-release-published == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Docker image
+        if: steps.semrel.outputs.new-release-published == 'true'
+        run: |
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/moowords-gui
+
+          docker build -t $IMAGE:$VERSION .
+
+          if [[ "$VERSION" == *"-"* ]]; then
+            docker tag $IMAGE:$VERSION $IMAGE:dev
+          else
+            docker tag $IMAGE:$VERSION $IMAGE:latest
+          fi
+
+      - name: Push Docker image
+        if: steps.semrel.outputs.new-release-published == 'true'
+        run: |
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/moowords-gui
+
+          docker push $IMAGE:$VERSION
+
+          if [[ "$VERSION" == *"-"* ]]; then
+            docker push $IMAGE:dev
+          else
+            docker push $IMAGE:latest
+          fi
