@@ -1,0 +1,54 @@
+name: Build & Push Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Angular App
+        run: npm ci && npm run build -- --configuration production
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/moowords-gui
+
+          docker build -t $IMAGE:$VERSION .
+
+          if [[ "$VERSION" == *"-"* ]]; then
+            docker tag $IMAGE:$VERSION $IMAGE:dev
+          else
+            docker tag $IMAGE:$VERSION $IMAGE:latest
+          fi
+
+      - name: Push Docker image
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/moowords-gui
+
+          docker push $IMAGE:$VERSION
+
+          if [[ "$VERSION" == *"-"* ]]; then
+            docker push $IMAGE:dev
+          else
+            docker push $IMAGE:latest
+          fi
